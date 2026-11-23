@@ -81,7 +81,7 @@ def layout(words, k):
     toks = [(w, b) + tok_metrics(w, b, k) for w, b in words]
     sp = lambda a, b: (26 if (a[1] or b[1]) else 18) * k
     def width(line): return sum(t[3] for t in line) + sum(sp(line[i], line[i + 1]) for i in range(len(line) - 1))
-    if width(toks) <= SAFE_R - SAFE_L: return [toks], sp, width
+    if width(toks) <= SAFE_R - SAFE_L or len(toks) == 1: return [toks], sp, width
     best = None
     for i in range(1, len(toks)):          # екі жолға ең тең бөлу
         a, b = toks[:i], toks[i:]
