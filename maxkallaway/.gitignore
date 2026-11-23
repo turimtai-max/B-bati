@@ -1,0 +1,6 @@
+inbox/
+projects/*/audio/
+projects/*/chunks/
+projects/*/out/
+projects/*/test/
+projects/*/src/
