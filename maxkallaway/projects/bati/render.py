@@ -188,7 +188,7 @@ def main():
                            '[mu][sc]sidechaincompress=threshold=0.03:ratio=3:attack=30:release=450[duck];'
                            '[vo][duck]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89[a]',
         '-map', '[v]', '-map', '[a]', '-frames:v', str(nfr), '-t', f'{TOTAL:.3f}',
-        '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-maxrate', '9M', '-bufsize', '18M', '-profile:v', 'high',
+        '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-maxrate', '7M', '-bufsize', '14M', '-profile:v', 'high',
         '-pix_fmt', 'yuv420p', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
         '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-movflags', '+faststart', final], stdin=subprocess.PIPE)
     last_key, last = None, None
