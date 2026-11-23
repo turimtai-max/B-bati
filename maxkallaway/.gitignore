@@ -4,3 +4,4 @@ projects/*/chunks/
 projects/*/out/
 projects/*/test/
 projects/*/src/
+__pycache__/
