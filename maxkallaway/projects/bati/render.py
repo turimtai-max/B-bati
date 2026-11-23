@@ -7,7 +7,7 @@ import os, sys, subprocess, functools, hashlib, wave
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from plan import SHOTS, SUBS, THOUGHTS
+from plan import SHOTS, SUBS, THOUGHTS, HOOK_SFX_AT
 
 P = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(os.path.dirname(P))
@@ -52,7 +52,7 @@ def exposure(f, a, d):
     return float(max(0.72, min(1.0, g))), y
 
 # ---------- субтитр ----------
-SAFE_L, SAFE_R = 96, 984
+SAFE_L, SAFE_R = 110, 940   # оң жақтағы Reels иконкаларынан аулақ
 @functools.lru_cache(None)
 def sfont(name, size, wg=None):
     path = os.path.join(FONTS, name) if name.startswith('Montserrat') else os.path.join(FDIR, name)
@@ -67,7 +67,7 @@ def parse(text):
             out.append((w, i % 2 == 1))
     return out
 
-SANS, SANS_SIZE, TRACK = 'Montserrat-SemiBold.ttf', 44, 0.10    # кіші, бас әріп, кең аралық
+SANS, SANS_SIZE, TRACK = 'Montserrat-SemiBold.ttf', 46, 0.025    # кіші, бас әріп, кең аралық
 SERIF, SERIF_SIZE, SERIF_W = 'PlayfairDisplay-Italic.ttf', 92, 600  # кілт сөз — үлкен курсив
 
 def tok_metrics(w, key, k):
@@ -79,7 +79,7 @@ def tok_metrics(w, key, k):
 
 def layout(words, k):
     toks = [(w, b) + tok_metrics(w, b, k) for w, b in words]
-    sp = lambda a, b: (26 if (a[1] or b[1]) else 18) * k
+    sp = lambda a, b: (15 if (a[1] or b[1]) else 13) * k
     def width(line): return sum(t[3] for t in line) + sum(sp(line[i], line[i + 1]) for i in range(len(line) - 1))
     if width(toks) <= SAFE_R - SAFE_L or len(toks) == 1: return [toks], sp, width
     best = None
@@ -100,7 +100,7 @@ def draw_sub(text):
         if max(width(l) for l in lines) <= SAFE_R - SAFE_L or k < 0.6: break
         k -= 0.05
     has_key = any(b for _, b in words)
-    lh = (SERIF_SIZE if has_key else SANS_SIZE * 1.6) * k * 1.12
+    lh = (SERIF_SIZE if has_key else SANS_SIZE * 1.6) * k * 0.95
     img = Image.new('RGBA', (W, 400), (0, 0, 0, 0))
     base0 = 200 - lh * (len(lines) - 1) / 2 + (SERIF_SIZE * 0.32 * k if has_key else SANS_SIZE * 0.36 * k)
     def paint(d, dx, dy, fill, stroke=0):
@@ -132,7 +132,7 @@ def sub_at(t):
         if s0 <= t < e: return txt, t - s0
     return None, 0
 
-SUB_Y = 360
+SUB_Y = 1320   # төменде, Reels батырмалары мен жазуынан жоғары (safe zone y ≤ 1393)
 def overlay(t):
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     txt, dt = sub_at(t)
@@ -165,6 +165,21 @@ def whoosh(seed, length=0.75, peak=0.42):
     y[0] *= env * np.sqrt(1 - pan); y[1] *= env * np.sqrt(pan)
     return y / np.abs(y).max()
 
+def impact(seed=7):
+    """Хукқа: төмен «бум» + жарқын соққы + қысқа шлейф — бірден назар аудартады."""
+    rng = np.random.default_rng(seed)
+    n = int(SR * 1.6); t = np.arange(n) / SR
+    f = 38 + 110 * np.exp(-t / 0.07)
+    boom = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.45)
+    click = rng.standard_normal(n) * np.exp(-t / 0.012)
+    tail = rng.standard_normal(n); lo = 0.0; a = np.exp(-2 * np.pi * 1800 / SR)
+    for i in range(n): lo = a * lo + (1 - a) * tail[i]; tail[i] = lo
+    tail *= np.exp(-t / 0.35) * 2.5
+    y = 1.0 * boom + 0.35 * click + 0.5 * tail
+    y = np.tanh(1.6 * y)
+    y = np.vstack([y, np.roll(y, int(SR * 0.008))])
+    return y / np.abs(y).max()
+
 def sfx_track(path):
     n = int(SR * TOTAL) + SR
     tr = np.zeros((2, n))
@@ -172,6 +187,8 @@ def sfx_track(path):
     for i, t in enumerate(THOUGHTS):
         w = variants[i % 3]; st = int((t - 0.42) * SR)   # ең қатты сәті — кадр ауысқан жерде
         st = max(0, st); tr[:, st:st + w.shape[1]] += w[:, :n - st]
+    hit = impact(); st = int(HOOK_SFX_AT * SR)
+    tr[:, st:st + hit.shape[1]] += 1.15 * hit
     tr = (tr / max(1e-9, np.abs(tr).max()) * 0.9 * 32767).astype('<i2')
     with wave.open(path, 'wb') as wf:
         wf.setnchannels(2); wf.setsampwidth(2); wf.setframerate(SR); wf.writeframes(tr.T.tobytes())
@@ -228,7 +245,7 @@ def main():
             f'[3:a]atrim=0:{TOTAL:.3f},asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-27:TP=-6,'
             f'afade=t=in:d=0.6,afade=t=out:st={TOTAL-2.5:.3f}:d=2.5[mu];'
             '[mu][sc]sidechaincompress=threshold=0.03:ratio=3:attack=30:release=450[duck];'
-            f'[4:a]atrim=0:{TOTAL:.3f},highpass=f=120,volume=0.22[fx];'
+            f'[4:a]atrim=0:{TOTAL:.3f},highpass=f=28,volume=0.26[fx];'
             '[vo][duck][fx]amix=inputs=3:normalize=0:duration=first,alimiter=limit=0.89[a]',
         '-map', '[v]', '-map', '[a]', '-frames:v', str(nfr), '-t', f'{TOTAL:.3f}',
         '-c:v', 'libx264', '-preset', 'fast', '-crf', '8', '-pix_fmt', 'yuv420p',
