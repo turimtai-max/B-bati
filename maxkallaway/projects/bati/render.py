@@ -46,31 +46,47 @@ def parse(text):
             out.append((w, i % 2 == 1))
     return out
 
+FDIR = os.path.join(HOME, 'fonts')
+STYLES = {
+    # (қарапайым сөз шрифті, салмақ), (кілт сөз шрифті, салмақ), кілт сөз өлшем коэф.
+    'playfair':  (('Montserrat-Medium.ttf', None), ('PlayfairDisplay-Italic.ttf', 700), 1.22),
+    'cormorant': (('Montserrat-Regular.ttf', None), ('CormorantGaramond-Italic.ttf', 650), 1.38),
+    'lora':      (('Montserrat-Medium.ttf', None), ('Lora-Italic.ttf', 600), 1.2),
+}
+STYLE = os.environ.get('SUB_STYLE', 'playfair')
+
+@functools.lru_cache(None)
+def sfont(spec, size):
+    name, wg = spec
+    path = os.path.join(FONTS, name) if name.startswith('Montserrat') else os.path.join(FDIR, name)
+    f = ImageFont.truetype(path, size)
+    if wg: f.set_variation_by_axes([wg])
+    return f
+
 def draw_sub(text, scale=1.0):
     words = parse(text)
-    size = 66
+    reg, key, kmul = STYLES[STYLE]
+    size = 64
     while True:
-        fr, fb = font('Bold', int(size * scale)), font('Black', int(size * scale))
-        sp = int(size * scale * 0.28)
+        fr, fb = sfont(reg, int(size * scale)), sfont(key, int(size * kmul * scale))
+        sp = int(size * scale * 0.30)
         widths = [(fb if b else fr).getlength(w) for w, b in words]
         tw = sum(widths) + sp * (len(words) - 1)
-        if tw <= (SAFE_R - SAFE_L) * scale or size <= 40: break
+        if tw <= (SAFE_R - SAFE_L) * scale or size <= 38: break
         size -= 2
     img = Image.new('RGBA', (W, 260), (0, 0, 0, 0))
-    x = (W - tw) / 2; y = 130 - int(size * scale * 0.62)
+    x = (W - tw) / 2; base = 150
     sh = Image.new('RGBA', img.size, (0, 0, 0, 0)); ds = ImageDraw.Draw(sh)
-    d = ImageDraw.Draw(img)
     xx = x
     for (w, b), wd in zip(words, widths):
-        f = fb if b else fr
-        ds.text((xx + 3, y + 5), w, font=f, fill=(0, 0, 0, 170))
+        ds.text((xx + 2, base + 4), w, font=fb if b else fr, fill=(0, 0, 0, 255), anchor='ls', stroke_width=3, stroke_fill=(0, 0, 0, 255))
         xx += wd + sp
-    sh = sh.filter(ImageFilter.GaussianBlur(6))
+    sh = Image.alpha_composite(Image.alpha_composite(sh.filter(ImageFilter.GaussianBlur(16)), sh.filter(ImageFilter.GaussianBlur(7))), sh.filter(ImageFilter.GaussianBlur(2)))
     img = Image.alpha_composite(img, sh); d = ImageDraw.Draw(img)
     xx = x
     for (w, b), wd in zip(words, widths):
-        f = fb if b else fr
-        d.text((xx, y), w, font=f, fill=(255, 255, 255, 255), stroke_width=max(3, int(5 * scale)), stroke_fill=(0, 0, 0, 255))
+        d.text((xx, base), w, font=fb if b else fr, fill=(255, 255, 255, 255), anchor='ls',
+               stroke_width=1, stroke_fill=(0, 0, 0, 120))
         xx += wd + sp
     return img
 
@@ -121,7 +137,7 @@ def overlay(t):
     txt, dt = sub_at(t)
     if txt:
         si = sub_img(txt, min(4, int(dt * FPS)))
-        img.alpha_composite(si, (0, 335 - 130))
+        img.alpha_composite(si, (0, 335 - 150))
     return img
 
 # ---------- кадрларды кесу ----------
